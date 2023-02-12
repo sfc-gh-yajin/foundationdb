@@ -775,6 +775,10 @@ bool addressInDbAndPrimaryDc(const NetworkAddress& address, Reference<AsyncVar<S
 		return true;
 	}
 
+	if (dbi.tenantBalancer.present() && dbi.tenantBalancer.get().address() == address) {
+		return true;
+	}
+
 	for (const auto& resolver : dbi.resolvers) {
 		if (resolver.address() == address) {
 			return true;
@@ -2208,7 +2212,9 @@ ACTOR Future<Void> workerServer(Reference<IClusterConnectionRecord> connRecord,
 						    .detail("BlobMigratorID",
 						            localInfo.blobMigrator.present() ? localInfo.blobMigrator.get().id() : UID())
 						    .detail("EncryptKeyProxyID",
-						            localInfo.encryptKeyProxy.present() ? localInfo.encryptKeyProxy.get().id() : UID());
+						            localInfo.encryptKeyProxy.present() ? localInfo.encryptKeyProxy.get().id() : UID())
+						    .detail("TenantBalancerID",
+						            localInfo.tenantBalancer.present() ? localInfo.tenantBalancer.get().id() : UID());
 						dbInfo->set(localInfo);
 					}
 					errorForwarders.add(
