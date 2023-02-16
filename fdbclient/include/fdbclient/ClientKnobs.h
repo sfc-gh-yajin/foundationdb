@@ -311,6 +311,10 @@ public:
 	int ENCRYPT_HEADER_AES_CTR_AES_CMAC_AUTH_VERSION;
 	int ENCRYPT_HEADER_AES_CTR_HMAC_SHA_AUTH_VERSION;
 
+	// tenant balancer
+	// rpc request timeout for tenant balancer clients
+	double TENANT_BALANCER_REQUEST_TIMEOUT;
+
 	ClientKnobs(Randomize randomize);
 	void initialize(Randomize randomize);
 };

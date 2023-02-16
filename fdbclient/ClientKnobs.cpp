@@ -312,6 +312,8 @@ void ClientKnobs::initialize(Randomize randomize) {
 	init( ENCRYPT_HEADER_AES_CTR_AES_CMAC_AUTH_VERSION, 1 );
 	init( ENCRYPT_HEADER_AES_CTR_HMAC_SHA_AUTH_VERSION, 1 );
 
+	init( TENANT_BALANCER_REQUEST_TIMEOUT,             20 );
+
 	// clang-format on
 }
 
