@@ -491,26 +491,35 @@ int unhex(char c) {
 	UNREACHABLE();
 }
 
-std::string unprintable(std::string const& val) {
+Optional<std::string> tryUnprintable(std::string const& val) {
 	std::string s;
 	for (int i = 0; i < val.size(); i++) {
 		char c = val[i];
 		if (c == '\\') {
-			if (++i == val.size())
-				ASSERT(false);
+			if (++i == val.size()) {
+				return Optional<std::string>();
+			}
 			if (val[i] == '\\') {
 				s += '\\';
 			} else if (val[i] == 'x') {
-				if (i + 2 >= val.size())
-					ASSERT(false);
+				if (i + 2 >= val.size()) {
+					return Optional<std::string>();
+				}
 				s += char((unhex(val[i + 1]) << 4) + unhex(val[i + 2]));
 				i += 2;
-			} else
-				ASSERT(false);
+			} else {
+				return Optional<std::string>();
+			}
 		} else
 			s += c;
 	}
 	return s;
+}
+
+std::string unprintable(std::string const& val) {
+	auto result = tryUnprintable(val);
+	ASSERT(result.present());
+	return result.get();
 }
 
 void DatabaseContext::validateVersion(Version version) const {
@@ -11174,6 +11183,15 @@ ACTOR Future<bool> blobRestoreActor(Reference<DatabaseContext> cx, KeyRange rang
 
 Future<bool> DatabaseContext::blobRestore(KeyRange range, Optional<Version> version) {
 	return blobRestoreActor(Reference<DatabaseContext>::addRef(this), range, version);
+}
+
+Optional<TenantBalancerInterface> DatabaseContext::getTenantBalancer() const {
+	return clientInfo->get().tenantBalancer;
+}
+
+Future<Void> DatabaseContext::onTenantBalancerChanged() const {
+	// TODO: target tenant balancer specifically
+	return clientInfo->onChange();
 }
 
 int64_t getMaxKeySize(KeyRef const& key) {
