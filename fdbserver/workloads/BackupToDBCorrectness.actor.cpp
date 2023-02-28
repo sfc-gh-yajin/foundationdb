@@ -343,7 +343,8 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 
 		try {
 			try {
-				wait(backupAgent->submitBackup(cx,
+				wait(backupAgent->submitBackup(self->extraDB,
+				                               cx,
 				                               tag,
 				                               backupRanges,
 				                               StopWhenDone{ !stopDifferentialDelay },
@@ -643,7 +644,8 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 			if (!self->locked && self->extraPrefix != self->backupPrefix && BUGGIFY) {
 				TraceEvent("BARW_SubmitBackup2", randomID).detail("Tag", printable(self->backupTag));
 				try {
-					extraBackup = backupAgent.submitBackup(self->extraDB,
+					extraBackup = backupAgent.submitBackup(cx,
+					                                       self->extraDB,
 					                                       self->backupTag,
 					                                       self->backupRanges,
 					                                       StopWhenDone::True,
@@ -695,7 +697,8 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 				if (!systemRestoreRange.empty()) {
 					state Key systemRestoreTag = "restore_system"_sr;
 					try {
-						wait(restoreTool.submitBackup(cx,
+						wait(restoreTool.submitBackup(self->extraDB,
+						                              cx,
 						                              systemRestoreTag,
 						                              systemRestoreRange,
 						                              StopWhenDone::True,
@@ -715,7 +718,8 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 				}
 
 				try {
-					wait(restoreTool.submitBackup(cx,
+					wait(restoreTool.submitBackup(self->extraDB,
+					                              cx,
 					                              self->restoreTag,
 					                              restoreRange,
 					                              StopWhenDone::True,

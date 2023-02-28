@@ -1887,7 +1887,7 @@ ACTOR Future<Void> submitDBBackup(Database src,
 		ASSERT(!backupRanges.empty());
 
 		wait(backupAgent.submitBackup(
-		    dest, KeyRef(tagName), backupRanges, StopWhenDone::False, StringRef(), StringRef(), LockDB::True));
+		    src, dest, KeyRef(tagName), backupRanges, StopWhenDone::False, StringRef(), StringRef(), LockDB::True));
 
 		// Check if a backup agent is running
 		bool agentRunning = wait(backupAgent.checkActive(dest));

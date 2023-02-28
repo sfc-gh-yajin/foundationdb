@@ -425,6 +425,7 @@ public:
 	};
 
 	Future<Void> submitBackup(Reference<ReadYourWritesTransaction> tr,
+	                          Database src,
 	                          Key tagName,
 	                          Standalone<VectorRef<KeyRangeRef>> backupRanges,
 	                          StopWhenDone = StopWhenDone::True,
@@ -432,7 +433,8 @@ public:
 	                          Key removePrefix = StringRef(),
 	                          LockDB lockDatabase = LockDB::False,
 	                          PreBackupAction backupAction = PreBackupAction::VERIFY);
-	Future<Void> submitBackup(Database cx,
+	Future<Void> submitBackup(Database src,
+	                          Database cx,
 	                          Key tagName,
 	                          Standalone<VectorRef<KeyRangeRef>> backupRanges,
 	                          StopWhenDone stopWhenDone = StopWhenDone::True,
@@ -442,7 +444,7 @@ public:
 	                          PreBackupAction backupAction = PreBackupAction::VERIFY) {
 		return runRYWTransaction(cx, [=](Reference<ReadYourWritesTransaction> tr) {
 			return submitBackup(
-			    tr, tagName, backupRanges, stopWhenDone, addPrefix, removePrefix, lockDatabase, backupAction);
+			    tr, src, tagName, backupRanges, stopWhenDone, addPrefix, removePrefix, lockDatabase, backupAction);
 		});
 	}
 
@@ -492,6 +494,7 @@ public:
 	static const Key keyRangeVersions;
 	static const Key keyCopyStop;
 	static const Key keyDatabasesInSync;
+	static const Key keySourceClusterConnectionStr;
 	static const int LATEST_DR_VERSION;
 
 	Future<int64_t> getTaskCount(Reference<ReadYourWritesTransaction> tr) { return taskBucket->getTaskCount(tr); }

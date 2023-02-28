@@ -54,7 +54,8 @@ struct AtomicSwitchoverWorkload : TestWorkload {
 		state DatabaseBackupAgent backupAgent(cx);
 		try {
 			TraceEvent("AS_Submit1").log();
-			wait(backupAgent.submitBackup(self->extraDB,
+			wait(backupAgent.submitBackup(cx,
+			                              self->extraDB,
 			                              BackupAgentBase::getDefaultTag(),
 			                              self->backupRanges,
 			                              StopWhenDone::False,

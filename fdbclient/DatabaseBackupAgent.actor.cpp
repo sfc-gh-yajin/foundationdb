@@ -42,6 +42,7 @@ const Key DatabaseBackupAgent::keyRemovePrefix = "remove_prefix"_sr;
 const Key DatabaseBackupAgent::keyRangeVersions = "range_versions"_sr;
 const Key DatabaseBackupAgent::keyCopyStop = "copy_stop"_sr;
 const Key DatabaseBackupAgent::keyDatabasesInSync = "databases_in_sync"_sr;
+const Key DatabaseBackupAgent::keySourceClusterConnectionStr = "src_connection_str"_sr;
 const int DatabaseBackupAgent::LATEST_DR_VERSION = 1;
 
 DatabaseBackupAgent::DatabaseBackupAgent()
@@ -2532,6 +2533,7 @@ public:
 
 	ACTOR static Future<Void> submitBackup(DatabaseBackupAgent* backupAgent,
 	                                       Reference<ReadYourWritesTransaction> tr,
+	                                       Key srcConnectionStr,
 	                                       Key tagName,
 	                                       Standalone<VectorRef<KeyRangeRef>> backupRanges,
 	                                       StopWhenDone stopWhenDone,
@@ -2619,6 +2621,8 @@ public:
 		tr->set(backupAgent->states.get(logUidValue).pack(DatabaseBackupAgent::keyConfigBackupTag), tagName);
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyConfigLogUid), logUidValue);
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId), backupUid);
+		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keySourceClusterConnectionStr),
+		        srcConnectionStr);
 		tr->set(backupAgent->states.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId),
 		        backupUid); // written to config and states because it's also used by abort
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyConfigBackupRanges),
@@ -2801,7 +2805,8 @@ public:
 		TraceEvent("DBA_SwitchoverVersionUpgraded").log();
 
 		try {
-			wait(drAgent.submitBackup(backupAgent->taskBucket->src,
+			wait(drAgent.submitBackup(dest,
+			                          backupAgent->taskBucket->src,
 			                          tagName,
 			                          backupRanges,
 			                          StopWhenDone::False,
@@ -3273,6 +3278,7 @@ Future<Void> DatabaseBackupAgent::atomicSwitchover(Database dest,
 }
 
 Future<Void> DatabaseBackupAgent::submitBackup(Reference<ReadYourWritesTransaction> tr,
+                                               Database src,
                                                Key tagName,
                                                Standalone<VectorRef<KeyRangeRef>> backupRanges,
                                                StopWhenDone stopWhenDone,
@@ -3280,8 +3286,18 @@ Future<Void> DatabaseBackupAgent::submitBackup(Reference<ReadYourWritesTransacti
                                                Key removePrefix,
                                                LockDB lockDatabase,
                                                PreBackupAction backupAction) {
-	return DatabaseBackupAgentImpl::submitBackup(
-	    this, tr, tagName, backupRanges, stopWhenDone, addPrefix, removePrefix, lockDatabase, backupAction);
+	Key srcConnection = StringRef(src->getConnectionRecord()->getConnectionString().toString());
+	assert(!srcConnection.empty());
+	return DatabaseBackupAgentImpl::submitBackup(this,
+	                                             tr,
+	                                             srcConnection,
+	                                             tagName,
+	                                             backupRanges,
+	                                             stopWhenDone,
+	                                             addPrefix,
+	                                             removePrefix,
+	                                             lockDatabase,
+	                                             backupAction);
 }
 
 Future<Void> DatabaseBackupAgent::discontinueBackup(Reference<ReadYourWritesTransaction> tr, Key tagName) {
