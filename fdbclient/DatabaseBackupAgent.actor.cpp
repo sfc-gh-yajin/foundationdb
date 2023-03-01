@@ -2710,6 +2710,11 @@ public:
 	                                           Key addPrefix,
 	                                           Key removePrefix,
 	                                           ForceAction forceAction) {
+		// This is confusing. The drAgent(dest) constructed here is intended to talk to the DR agent
+		// on the source cluster. Passing `dest` as arguement to the constructor just records the
+		// remote cluster: from the perspective of this drAgent, `dest` is remote. This is in contrast
+		// to `backupAgent`, from whose point of view, `dest` is local because `backupAgent` runs
+		// on `dest`.
 		state DatabaseBackupAgent drAgent(dest);
 		state UID destlogUid = wait(backupAgent->getLogUid(dest, tagName));
 		state EBackupState status = wait(backupAgent->getStateValue(dest, destlogUid));
