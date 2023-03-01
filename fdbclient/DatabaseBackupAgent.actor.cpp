@@ -20,6 +20,8 @@
 
 #include <iterator>
 #include "fdbclient/BackupAgent.actor.h"
+#include "fdbclient/CoordinationInterface.h"
+#include "fdbclient/ClusterConnectionMemoryRecord.h"
 #include "fdbclient/Status.h"
 #include "fdbclient/StatusClient.h"
 #include "fdbclient/DatabaseContext.h"
@@ -44,6 +46,33 @@ const Key DatabaseBackupAgent::keyCopyStop = "copy_stop"_sr;
 const Key DatabaseBackupAgent::keyDatabasesInSync = "databases_in_sync"_sr;
 const Key DatabaseBackupAgent::keySourceClusterConnectionStr = "src_connection_str"_sr;
 const int DatabaseBackupAgent::LATEST_DR_VERSION = 1;
+
+ACTOR
+Future<Database> getSourceDatabase(Reference<ReadYourWritesTransaction> tr, Value logUidValue) {
+	state Subspace config = Subspace(databaseBackupPrefixRange.begin).get(BackupAgentBase::keyConfig).get(logUidValue);
+	loop {
+		try {
+			tr->setOption(FDBTransactionOptions::ACCESS_SYSTEM_KEYS);
+			tr->setOption(FDBTransactionOptions::LOCK_AWARE);
+			Optional<Value> srcConnectionStr =
+			    wait(tr->get(config.pack(DatabaseBackupAgent::keySourceClusterConnectionStr)));
+			if (!srcConnectionStr.present()) {
+				throw key_not_found();
+			}
+			Reference<IClusterConnectionRecord> clusterFile = makeReference<ClusterConnectionMemoryRecord>(
+			    ClusterConnectionString(srcConnectionStr.get().toString()));
+			Database srcDb = Database::createDatabase(clusterFile, ApiVersion::LATEST_VERSION);
+			return srcDb;
+		} catch (Error& e) {
+			wait(tr->onError(e));
+		}
+	}
+}
+
+Future<Database> getSourceDatabase(Database cx, Value logUidValue) {
+	Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(cx));
+	return getSourceDatabase(tr, logUidValue);
+}
 
 DatabaseBackupAgent::DatabaseBackupAgent()
   : subspace(Subspace(databaseBackupPrefixRange.begin)), states(subspace.get(BackupAgentBase::keyStates)),
@@ -216,8 +245,11 @@ struct BackupRangeTaskFunc : TaskFuncBase {
 		                          .get(task->params[BackupAgentBase::keyConfigLogUid]);
 
 		wait(checkTaskVersion(cx, task, BackupRangeTaskFunc::name, BackupRangeTaskFunc::version));
+
 		// Find out if there is a shard boundary in(beginKey, endKey)
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		Standalone<VectorRef<KeyRef>> keys =
 		    wait(runRYWTransaction(taskBucket->src, [=](Reference<ReadYourWritesTransaction> tr) {
 			    return getBlockOfShards(tr,
@@ -555,6 +587,8 @@ struct FinishFullBackupTaskFunc : TaskFuncBase {
 		                            .get(task->params[BackupAgentBase::keyConfigLogUid]);
 		wait(checkTaskVersion(tr, task, FinishFullBackupTaskFunc::name, FinishFullBackupTaskFunc::version));
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
 
 		// Enable the stop key
 		Transaction srcTr(taskBucket->src);
@@ -639,6 +673,8 @@ struct EraseLogRangeTaskFunc : TaskFuncBase {
 		wait(checkTaskVersion(cx, task, EraseLogRangeTaskFunc::name, EraseLogRangeTaskFunc::version));
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		state Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(taskBucket->src));
 		loop {
 			try {
@@ -887,6 +923,8 @@ struct CopyLogRangeTaskFunc : TaskFuncBase {
 		state int rangeN = 0;
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		loop {
 			if (rangeN >= nRanges)
 				break;
@@ -1022,6 +1060,8 @@ struct CopyLogsTaskFunc : TaskFuncBase {
 		    tr->get(task->params[BackupAgentBase::keyConfigLogUid].withPrefix(applyMutationsBeginRange.begin));
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
 		Transaction srcTr(taskBucket->src);
 		srcTr.setOption(FDBTransactionOptions::LOCK_AWARE);
 		state Version endVersion = wait(srcTr.getReadVersion());
@@ -1194,6 +1234,8 @@ struct FinishedFullBackupTaskFunc : TaskFuncBase {
 		}
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue1 = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue1));
 		state Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(taskBucket->src));
 		state Key logUidValue = task->params[DatabaseBackupAgent::keyConfigLogUid];
 		state Key destUidValue = task->params[BackupAgentBase::destUid];
@@ -1316,6 +1358,8 @@ struct CopyDiffLogsTaskFunc : TaskFuncBase {
 		state Future<Optional<Value>> fStopWhenDone = tr->get(conf.pack(DatabaseBackupAgent::keyConfigStopWhenDoneKey));
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
 		Transaction srcTr(taskBucket->src);
 		srcTr.setOption(FDBTransactionOptions::LOCK_AWARE);
 		state Version endVersion = wait(srcTr.getReadVersion());
@@ -1609,6 +1653,8 @@ struct OldCopyLogRangeTaskFunc : TaskFuncBase {
 		state std::vector<Future<Void>> dump;
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		for (int i = 0; i < ranges.size(); ++i) {
 			results.push_back(PromiseStream<RCGroup>());
 			rc.push_back(readCommitted(taskBucket->src,
@@ -1704,6 +1750,8 @@ struct AbortOldBackupTaskFunc : TaskFuncBase {
 	                                   Reference<FutureBucket> futureBucket,
 	                                   Reference<Task> task) {
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		state DatabaseBackupAgent srcDrAgent(taskBucket->src);
 		state Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(cx));
 		state Key tagNameKey;
@@ -1831,6 +1879,7 @@ struct CopyDiffLogsUpgradeTaskFunc : TaskFuncBase {
 		// Set destUidValue and versionKey on src side
 		state Key destUidValue(logUidValue);
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		state Reference<ReadYourWritesTransaction> srcTr(new ReadYourWritesTransaction(taskBucket->src));
 		loop {
 			try {
@@ -1947,6 +1996,8 @@ struct BackupRestorableTaskFunc : TaskFuncBase {
 		                                  .get(task->params[BackupAgentBase::keyConfigLogUid]);
 		wait(checkTaskVersion(cx, task, BackupRestorableTaskFunc::name, BackupRestorableTaskFunc::version));
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		state Transaction tr(taskBucket->src);
 		loop {
 			try {
@@ -2086,6 +2137,7 @@ struct StartFullBackupTaskFunc : TaskFuncBase {
 		state Key beginVersionKey;
 
 		assert(task->params.find(BackupAgentBase::keyConfigLogUid) != task->params.end());
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
 		state Reference<ReadYourWritesTransaction> srcTr(new ReadYourWritesTransaction(taskBucket->src));
 		loop {
 			try {
@@ -2657,6 +2709,7 @@ public:
 		tr->clear(KeyRangeRef(mapPrefix, mapEnd));
 
 		state Version readVersion = invalidVersion;
+		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
 		if (backupAction == DatabaseBackupAgent::PreBackupAction::NONE) {
 			Transaction readTransaction(backupAgent->taskBucket->src);
 			readTransaction.setOption(FDBTransactionOptions::LOCK_AWARE);
@@ -2739,6 +2792,8 @@ public:
 			logUidValue = BinaryWriter::toValue(logUid, Unversioned());
 		}
 
+		Value destlogUidValue = BinaryWriter::toValue(destlogUid, Unversioned());
+		Database srcDb = wait(getSourceDatabase(dest, destlogUidValue));
 		// Lock src, record commit version
 		state Transaction tr(backupAgent->taskBucket->src);
 		state Version commitVersion;
@@ -2985,6 +3040,8 @@ public:
 			}
 		}
 
+		Database srcDb = wait(getSourceDatabase(cx, logUidValue));
+
 		if (!dstOnly) {
 			state Future<Void> partialTimeout = partial ? delay(30.0) : Never();
 			state Reference<ReadYourWritesTransaction> srcTr(
@@ -3089,6 +3146,10 @@ public:
 		tr->setOption(FDBTransactionOptions::LOCK_AWARE);
 		state std::string statusText;
 		state int retries = 0;
+		state UID logUid1 = wait(backupAgent->getLogUid(tr, tagName));
+
+		Value logUidValue = BinaryWriter::toValue(logUid1, Unversioned());
+		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
 
 		loop {
 			try {
