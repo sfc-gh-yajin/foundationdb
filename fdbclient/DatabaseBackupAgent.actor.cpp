@@ -3158,9 +3158,6 @@ public:
 		tr->setOption(FDBTransactionOptions::LOCK_AWARE);
 		state std::string statusText;
 		state int retries = 0;
-		// state UID logUid1 = wait(backupAgent->getLogUid(tr, tagName));
-
-		// Value logUidValue = BinaryWriter::toValue(logUid1, Unversioned());
 
 		loop {
 			try {
@@ -3170,13 +3167,14 @@ public:
 				wait(success(tr->getReadVersion())); // get the read version before getting a version from the source
 				                                     // database to prevent the time differential from going negative
 
+				state UID logUid = wait(backupAgent->getLogUid(tr, tagName));
+				Value logUidValue = BinaryWriter::toValue(logUid, Unversioned());
+
 				state Transaction scrTr(backupAgent->taskBucket->src);
 				scrTr.setOption(FDBTransactionOptions::LOCK_AWARE);
 				state Future<Version> srcReadVersion = scrTr.getReadVersion();
 
 				statusText = "";
-
-				state UID logUid = wait(backupAgent->getLogUid(tr, tagName));
 
 				state Future<Optional<Value>> fPaused = tr->get(backupAgent->taskBucket->getPauseKey());
 				state Future<RangeResult> fErrorValues =
