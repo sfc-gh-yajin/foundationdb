@@ -250,7 +250,7 @@ struct BackupRangeTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 			ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		Standalone<VectorRef<KeyRef>> keys =
 		    wait(runRYWTransaction(taskBucket->src, [=](Reference<ReadYourWritesTransaction> tr) {
 			    return getBlockOfShards(tr,
@@ -590,7 +590,7 @@ struct FinishFullBackupTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 
 		// Enable the stop key
 		Transaction srcTr(taskBucket->src);
@@ -677,7 +677,7 @@ struct EraseLogRangeTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		state Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(taskBucket->src));
 		loop {
 			try {
@@ -928,7 +928,7 @@ struct CopyLogRangeTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		loop {
 			if (rangeN >= nRanges)
 				break;
@@ -1066,7 +1066,7 @@ struct CopyLogsTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		Transaction srcTr(taskBucket->src);
 		srcTr.setOption(FDBTransactionOptions::LOCK_AWARE);
 		state Version endVersion = wait(srcTr.getReadVersion());
@@ -1241,7 +1241,7 @@ struct FinishedFullBackupTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue1 = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue1 = task->params[BackupAgentBase::keyConfigLogUid];
 		state Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(taskBucket->src));
 		state Key logUidValue = task->params[DatabaseBackupAgent::keyConfigLogUid];
 		state Key destUidValue = task->params[BackupAgentBase::destUid];
@@ -1366,7 +1366,7 @@ struct CopyDiffLogsTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		Transaction srcTr(taskBucket->src);
 		srcTr.setOption(FDBTransactionOptions::LOCK_AWARE);
 		state Version endVersion = wait(srcTr.getReadVersion());
@@ -1662,7 +1662,7 @@ struct OldCopyLogRangeTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		for (int i = 0; i < ranges.size(); ++i) {
 			results.push_back(PromiseStream<RCGroup>());
 			rc.push_back(readCommitted(taskBucket->src,
@@ -1760,7 +1760,7 @@ struct AbortOldBackupTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		state DatabaseBackupAgent srcDrAgent(taskBucket->src);
 		state Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(cx));
 		state Key tagNameKey;
@@ -2008,7 +2008,7 @@ struct BackupRestorableTaskFunc : TaskFuncBase {
 		if (false && task->params.find(BackupAgentBase::keyConfigLogUid) == task->params.end()) {
 		ASSERT(false);
 		}
-		Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
+		// Value logUidValue = task->params[BackupAgentBase::keyConfigLogUid];
 		state Transaction tr(taskBucket->src);
 		loop {
 			try {
