@@ -74,6 +74,28 @@ Future<Database> getSourceDatabase(Database cx, Value logUidValue) {
 	return getSourceDatabase(tr, logUidValue);
 }
 
+ACTOR
+Future<Void> getAndCheckSourceDatabase(Reference<ReadYourWritesTransaction> tr,
+                                       Value logUidValue,
+                                       Database expectedSrc) {
+	Database srcDb = wait(getSourceDatabase(tr, logUidValue));
+	if (srcDb->getConnectionRecord()->getConnectionString().toString() !=
+	    expectedSrc->getConnectionRecord()->getConnectionString().toString()) {
+		throw internal_error();
+	}
+	return Void();
+}
+
+ACTOR
+Future<Void> getAndCheckSourceDatabase(Database cx, Value logUidValue, Database expectedSrc) {
+	Database srcDb = wait(getSourceDatabase(cx, logUidValue));
+	if (srcDb->getConnectionRecord()->getConnectionString().toString() !=
+	    expectedSrc->getConnectionRecord()->getConnectionString().toString()) {
+		throw internal_error();
+	}
+	return Void();
+}
+
 DatabaseBackupAgent::DatabaseBackupAgent()
   : subspace(Subspace(databaseBackupPrefixRange.begin)), states(subspace.get(BackupAgentBase::keyStates)),
     config(subspace.get(BackupAgentBase::keyConfig)), errors(subspace.get(BackupAgentBase::keyErrors)),
@@ -2705,11 +2727,7 @@ public:
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId), backupUid);
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keySourceClusterConnectionStr),
 		        srcConnectionStr);
-		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
-		if (srcDb->getConnectionRecord()->getConnectionString() !=
-		    backupAgent->taskBucket->src->getConnectionRecord()->getConnectionString()) {
-			throw internal_error();
-		}
+		wait(getAndCheckSourceDatabase(tr, logUidValue, backupAgent->taskBucket->src));
 		tr->set(backupAgent->states.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId),
 		        backupUid); // written to config and states because it's also used by abort
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyConfigBackupRanges),
