@@ -47,6 +47,32 @@ const Key DatabaseBackupAgent::keyDatabasesInSync = "databases_in_sync"_sr;
 const Key DatabaseBackupAgent::keySourceClusterConnectionStr = "src_connection_str"_sr;
 const int DatabaseBackupAgent::LATEST_DR_VERSION = 1;
 
+static std::unordered_set<UID> getAllUids() {
+	static std::unordered_set<UID> _uids = {};
+	return _uids;
+}
+
+ACTOR
+Future<Optional<Database>> getSourceDatabaseNoRetry(Reference<ReadYourWritesTransaction> tr, Value logUidValue) {
+	state Subspace config = Subspace(databaseBackupPrefixRange.begin).get(BackupAgentBase::keyConfig).get(logUidValue);
+	tr->setOption(FDBTransactionOptions::ACCESS_SYSTEM_KEYS);
+	tr->setOption(FDBTransactionOptions::LOCK_AWARE);
+	Optional<Value> srcConnectionStr = wait(tr->get(config.pack(DatabaseBackupAgent::keySourceClusterConnectionStr)));
+	if (!srcConnectionStr.present()) {
+		UID uid = BinaryReader::fromStringRef<UID>(logUidValue, Unversioned());
+		const auto& uids = getAllUids();
+		if (uids.count(uid)) {
+			throw key_not_found();
+		} else {
+			return Optional<Database>();
+		}
+	}
+	Reference<IClusterConnectionRecord> clusterFile =
+	    makeReference<ClusterConnectionMemoryRecord>(ClusterConnectionString(srcConnectionStr.get().toString()));
+	Database srcDb = Database::createDatabase(clusterFile, ApiVersion::LATEST_VERSION);
+	return srcDb;
+}
+
 ACTOR
 Future<Database> getSourceDatabase(Reference<ReadYourWritesTransaction> tr, Value logUidValue) {
 	state Subspace config = Subspace(databaseBackupPrefixRange.begin).get(BackupAgentBase::keyConfig).get(logUidValue);
@@ -72,6 +98,18 @@ Future<Database> getSourceDatabase(Reference<ReadYourWritesTransaction> tr, Valu
 Future<Database> getSourceDatabase(Database cx, Value logUidValue) {
 	Reference<ReadYourWritesTransaction> tr(new ReadYourWritesTransaction(cx));
 	return getSourceDatabase(tr, logUidValue);
+}
+
+ACTOR
+Future<Database> getAndCheckSourceDatabaseNoRetry(Reference<ReadYourWritesTransaction> tr,
+                                                  Value logUidValue,
+                                                  Database expectedSrc) {
+	Optional<Database> srcDb = wait(getSourceDatabaseNoRetry(tr, logUidValue));
+	if (srcDb.present() && srcDb.get()->getConnectionRecord()->getConnectionString().toString() !=
+	                           expectedSrc->getConnectionRecord()->getConnectionString().toString()) {
+		throw internal_error();
+	}
+	return srcDb.present() ? srcDb.get() : Database();
 }
 
 ACTOR
@@ -2740,6 +2778,7 @@ public:
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId), backupUid);
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keySourceClusterConnectionStr),
 		        srcConnectionStr);
+		getAllUids().insert(logUid);
 		wait(getAndCheckSourceDatabase(tr, logUidValue, backupAgent->taskBucket->src));
 		tr->set(backupAgent->states.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId),
 		        backupUid); // written to config and states because it's also used by abort
@@ -2997,6 +3036,7 @@ public:
 		state Key logUidValue, destUidValue;
 		state UID logUid, destUid;
 		state Value backupUid;
+		state Database srcDb;
 
 		loop {
 			try {
@@ -3029,6 +3069,9 @@ public:
 				Optional<Value> _backupUid =
 				    wait(tr->get(backupAgent->states.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId)));
 				backupUid = _backupUid.get();
+
+				Database _srcDb = wait(getAndCheckSourceDatabaseNoRetry(tr, logUidValue, backupAgent->taskBucket->src));
+				srcDb = _srcDb;
 
 				// Clearing the folder id will prevent future tasks from executing
 				tr->clear(backupAgent->config.get(logUidValue).range());
