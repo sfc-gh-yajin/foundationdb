@@ -2705,6 +2705,9 @@ public:
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId), backupUid);
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keySourceClusterConnectionStr),
 		        srcConnectionStr);
+		Database srcDb = wait(getSourceDatabase(tr, logUidValue));
+		if (srcDb->getConnectionRecord() != backupAgent->taskBucket->src->getConnectionRecord()) {
+		}
 		tr->set(backupAgent->states.get(logUidValue).pack(DatabaseBackupAgent::keyFolderId),
 		        backupUid); // written to config and states because it's also used by abort
 		tr->set(backupAgent->config.get(logUidValue).pack(DatabaseBackupAgent::keyConfigBackupRanges),
