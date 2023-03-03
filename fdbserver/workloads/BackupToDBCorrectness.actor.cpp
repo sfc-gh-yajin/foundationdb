@@ -302,6 +302,7 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 	ACTOR static Future<Void> doBackup(BackupToDBCorrectnessWorkload* self,
 	                                   double startDelay,
 	                                   DatabaseBackupAgent* backupAgent,
+	                                   Database src,
 	                                   Database cx,
 	                                   Key tag,
 	                                   Standalone<VectorRef<KeyRangeRef>> backupRanges,
@@ -343,7 +344,7 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 
 		try {
 			try {
-				wait(backupAgent->submitBackup(self->extraDB,
+				wait(backupAgent->submitBackup(src,
 				                               cx,
 				                               tag,
 				                               backupRanges,
@@ -608,6 +609,7 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 			state Future<Void> b = doBackup(self,
 			                                0,
 			                                &backupAgent,
+			                                cx,
 			                                self->extraDB,
 			                                self->backupTag,
 			                                self->backupRanges,
@@ -623,6 +625,7 @@ struct BackupToDBCorrectnessWorkload : TestWorkload {
 				b = b && doBackup(self,
 				                  self->abortAndRestartAfter,
 				                  &backupAgent,
+				                  cx,
 				                  self->extraDB,
 				                  self->backupTag,
 				                  self->backupRanges,

@@ -299,7 +299,7 @@ struct BackupToDBUpgradeWorkload : TestWorkload {
 			wait(delay(self->backupAfter));
 
 			TraceEvent("DRU_DoBackup").detail("Tag", printable(self->backupTag));
-			state Future<Void> b = doBackup(self, &backupAgent, self->extraDB, self->backupTag, self->backupRanges);
+			state Future<Void> b = doBackup(self, &backupAgent, cx, self->backupTag, self->backupRanges);
 
 			TraceEvent("DRU_DoBackupWait").detail("BackupTag", printable(self->backupTag));
 			wait(b);
