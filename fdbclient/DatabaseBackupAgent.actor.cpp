@@ -47,6 +47,7 @@ const Key DatabaseBackupAgent::keyDatabasesInSync = "databases_in_sync"_sr;
 const Key DatabaseBackupAgent::keySourceClusterConnectionStr = "src_connection_str"_sr;
 const int DatabaseBackupAgent::LATEST_DR_VERSION = 1;
 
+// Not thread safe, but ok for testing
 static std::unordered_set<UID> getAllUids() {
 	static std::unordered_set<UID> _uids = {};
 	return _uids;
@@ -3249,6 +3250,8 @@ public:
 
 				state UID logUid = wait(backupAgent->getLogUid(tr, tagName));
 				Value logUidValue = BinaryWriter::toValue(logUid, Unversioned());
+
+				Database srcDb = wait(getAndCheckSourceDatabaseNoRetry(tr, logUidValue, backupAgent->taskBucket->src));
 
 				state Transaction scrTr(backupAgent->taskBucket->src);
 				scrTr.setOption(FDBTransactionOptions::LOCK_AWARE);
